@@ -5,34 +5,29 @@ import threading
 from eznn import Dense, Sequential
 import time
 
-# --- параметры ---
 W, H = 800, 600
 PLOT_W = 200
 N_CLASSES = 4
 POINT_RADIUS = 8
 CHOICE_BOX_SIZE = 40
 CHOICE_BOX_MARGIN = 10
-STEP = 3  # шаг сетки меньше — более точная карта
+STEP = 3
 
-# --- pygame ---
 pygame.init()
 screen = pygame.display.set_mode((W+PLOT_W, H))
 pygame.display.set_caption("Нейросеть строит границы стран (быстро и точно)")
 font = pygame.font.SysFont("Arial", 18)
 clock = pygame.time.Clock()
 
-# --- данные ---
 X_data = []
 y_data = []
 loss_history = []
 current_class = 0
 
-# --- цвета ---
 DARK_COLORS = [(80,30,30),(30,80,50),(30,50,80),(80,80,30)]
 COLORS = [(255,100,100),(100,255,180),(100,180,255),(255,255,100)]
 DARK_BG = (20,20,30)
 
-# --- модель (больше слоёв + tanh для плавности) ---
 model = Sequential([
     Dense(2, 128, "tanh"),
     Dense(128, 128, "tanh"),
@@ -44,27 +39,24 @@ model = Sequential([
 lock = threading.Lock()
 training = True
 
-# --- асинхронная функция обучения ---
 def async_train():
     while training:
         lock.acquire()
         if len(X_data) >= 1:
             X = np.array(X_data)
             y = np.eye(N_CLASSES)[y_data]
-            # делаем несколько шагов обучения за кадр для быстрого подстраивания
             for _ in range(5):
                 out = model.forward(X)
                 loss = -np.mean(np.sum(y * np.log(out + 1e-9), axis=1))
                 grad = (out - y)/X.shape[0]
-                model.backward(grad, 0.15)  # чуть меньше lr, но больше итераций
+                model.backward(grad, 0.15)
             loss_history.append(loss)
         lock.release()
-        time.sleep(0.005)  # минимальная пауза
+        time.sleep(0.005)
 
 thread = threading.Thread(target=async_train)
 thread.start()
 
-# --- функции отрисовки ---
 def draw_background():
     bg_surf = pygame.Surface((W,H))
     lock.acquire()
@@ -107,7 +99,6 @@ def draw_loss_plot():
             x2 = W + 10 + i
             y2 = scaled[i]
             pygame.draw.line(screen,(50,200,255),(x1,y1),(x2,y2),2)
-        # подписи каждые 40 пикселей
         for i, val in enumerate(recent_losses):
             if i%40==0:
                 text = font.render(f"{val:.2f}",True,(200,200,200))
@@ -127,7 +118,6 @@ def draw_choice_boxes():
         text = font.render(str(i+1),True,(255,255,255))
         screen.blit(text,(x+CHOICE_BOX_SIZE//2-6,y+CHOICE_BOX_SIZE//2-10))
 
-# --- основной цикл ---
 running = True
 while running:
     for e in pygame.event.get():
@@ -143,7 +133,6 @@ while running:
             if mx>W: continue
             x = (mx/W)*2-1
             y = (my/H)*2-1
-            # быстрый append без долгого lock
             lock.acquire()
             X_data.append([x,y])
             y_data.append(current_class)
